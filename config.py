@@ -1,20 +1,20 @@
 import os
 
 # Bot token @Botfather
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7285068108:AAE0J9EsQUwGQtygNbcYu78p-LVK_Yt3sdc")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 # Your API ID from my.telegram.org
-API_ID = int(os.environ.get("API_ID", "26605094"))
+API_ID = int(os.environ.get("API_ID", ""))
 
 # Your API Hash from my.telegram.org
-API_HASH = os.environ.get("API_HASH", "5d8bfdc71c2ae67fb636be3e0ef85936")
+API_HASH = os.environ.get("API_HASH", "")
 
 # Your Owner / Admin Id For Broadcast 
-ADMINS = int(os.environ.get("ADMINS", "1791345486"))
+ADMINS = int(os.environ.get("ADMINS", ""))
 
 # Your Mongodb Database Url
 # Warning - Give Db uri in deploy server environment variable, don't give in repo.
-DB_URI = os.environ.get("DB_URI", "mongodb+srv://rajrph54_db_user:pEN1GikquWKlDcGZ@cluster0.evnmi8x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0") # Warning - Give Db uri in deploy server environment variable, don't give in repo.
+DB_URI = os.environ.get("DB_URI", "") # Warning - Give Db uri in deploy server environment variable, don't give in repo.
 DB_NAME = os.environ.get("DB_NAME", "idfinderpro")
 
 # Force Subscription Channel
