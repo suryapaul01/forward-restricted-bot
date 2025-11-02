@@ -589,7 +589,7 @@ This occurs on Windows with file operations. The bot now includes:
 
 - **Channel:** [@idfinderpro](https://t.me/idfinderpro)
 - **Developer:** [@tataa_sumo](https://t.me/tataa_sumo)
-- **GitHub:** [suryapaul01/save-restricted-bot](https://github.com/suryapaul01/save-restricted-bot)
+- **GitHub:** [suryapaul01](https://github.com/suryapaul01)
 
 ---
 
@@ -618,7 +618,6 @@ This project is for **educational purposes only**.
 - ✅ **Voice/Animation/Sticker Support** - Complete media coverage
 
 ### **Version 2.0**
-- Complete rebranding
 - Premium membership system
 - Force subscription
 - Rate limiting
