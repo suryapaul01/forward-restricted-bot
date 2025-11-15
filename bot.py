@@ -1,13 +1,18 @@
 import asyncio
 import sys
+import platform
 
 # Fix for Python 3.10+ on Windows/RDP: Create event loop before importing Pyrogram
 if sys.platform == 'win32':
+    # For Python 3.8+ on Windows
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 # Ensure event loop exists before importing Pyrogram
+# This handles both Python 3.10 and 3.11+ properly
 try:
     loop = asyncio.get_event_loop()
+    if loop.is_closed():
+        raise RuntimeError("Event loop is closed")
 except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
