@@ -1,8 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tree:*)",
-      "Bash(python -m py_compile:*)"
+      "Bash(cat:*)",
+      "Bash(git log:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(git fetch:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

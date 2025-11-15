@@ -1,5 +1,5 @@
 pyrofork==2.3.45
-pycryptodome>=3.19.0  # Faster encryption alternative to tgcrypto (works on Windows without C++ compiler)
+TgCrypto>=1.2.5  # Fast cryptography for Pyrogram (significant speed boost)
 motor>=3.3.2
 Flask>=3.0.0
 gunicorn>=21.2.0

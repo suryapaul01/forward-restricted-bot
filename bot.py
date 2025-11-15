@@ -66,4 +66,17 @@ class Bot(Client):
         await super().stop()
         print('Bot Stopped Bye')
 
-Bot().run()
+if __name__ == "__main__":
+    try:
+        print("Initializing bot...")
+        bot = Bot()
+        print("Starting bot...")
+        bot.run()
+    except KeyboardInterrupt:
+        print("\n[INFO] Bot stopped by user")
+    except Exception as e:
+        print(f"[ERROR] Bot crashed with error: {e}")
+        import traceback
+        traceback.print_exc()
+        # Exit with error code so the service manager knows something went wrong
+        sys.exit(1)
