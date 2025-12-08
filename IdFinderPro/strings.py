@@ -6,7 +6,7 @@ HELP_TXT = """**📖 HELP - Restricted Content Download Bot**
 3. Send any Telegram post link
 4. Get your content instantly!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━
 
 **📥 Downloading Files**
 
@@ -21,11 +21,11 @@ Send invite link → Then post link
 
 **💎 Rate Limits:**
 • **Free Users:** 10 downloads/day
-• **Premium Users:** 1000 downloads/day
+• **Premium Users:** Unlimited downloads
 
 Upgrade with /premium!
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━
 
 **🎯 Advanced Features**
 
@@ -75,13 +75,13 @@ This downloads messages 1 to 50 at once!
 **💡 Pro Tips:**
 • Start with small ranges to test
 • Use /batch for detailed batch download guide
-• Premium users can download 1000/day!
+• Premium users have unlimited downloads!
 """
 
 PREMIUM_HELP = """**💎 Premium Membership - Unlock Full Power**
 
 **✨ Premium Benefits:**
-✅ **1000 downloads/day** (vs 10 free)
+✅ **Unlimited downloads** (vs 10/day free)
 ✅ **Priority support** 
 ✅ **Faster processing**
 ✅ **Channel forwarding** with custom settings
@@ -114,7 +114,7 @@ Use /premium to see details
 
 COMMANDS_HELP = """**⚙️ Available Commands - Full Reference**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━
 
 **📥 MAIN COMMANDS:**
 
@@ -126,7 +126,7 @@ COMMANDS_HELP = """**⚙️ Available Commands - Full Reference**
 /redeem - Redeem premium codes
 /cancel - Stop ongoing download
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━
 
 **🎯 ADVANCED FEATURES:**
 
@@ -140,15 +140,7 @@ COMMANDS_HELP = """**⚙️ Available Commands - Full Reference**
 
 /batch - How to download multiple files at once
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**👨‍💼 ADMIN ONLY:**
-
-/admin - Open admin panel
-/generate - Generate bulk redeem codes (1-50)
-/premiumlist - Manage premium users
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━
 
 **📞 Support & Info:**
 Developer: @tataa_sumo

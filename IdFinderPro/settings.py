@@ -21,12 +21,20 @@ async def settings_menu(client: Client, message: Message):
     thumbnail = settings.get('custom_thumbnail') if settings else None
     suffix = settings.get('filename_suffix') if settings else None
     index_count = settings.get('index_count', 0) if settings else 0
+    send_as_document = await db.get_send_as_document(user_id)
     
     # Format status
     dest_status = "✅ Set" if destination else "❌ Not Set"
     caption_status = "✅ Set" if caption else "❌ Not Set"
     thumb_status = "✅ Set" if thumbnail else "❌ Not Set"
     suffix_status = "✅ Set" if suffix else "❌ Not Set"
+    upload_type = "📄 Document" if send_as_document else "📤 Media"
+    
+    # Get replace words settings
+    replace_caption = settings.get('replace_caption_words') if settings else None
+    replace_filename = settings.get('replace_filename_words') if settings else None
+    replace_caption_status = f"✅ {replace_caption[:20]}..." if replace_caption and len(replace_caption) > 20 else (f"✅ {replace_caption}" if replace_caption else "❌ Not Set")
+    replace_filename_status = f"✅ {replace_filename[:20]}..." if replace_filename and len(replace_filename) > 20 else (f"✅ {replace_filename}" if replace_filename else "❌ Not Set")
     
     settings_text = f"""**⚙️ Forward Settings**
 
@@ -38,13 +46,20 @@ Configure how your downloaded files are forwarded to your channel.
 🖼️ **Custom Thumbnail:** {thumb_status}
 📝 **Filename Suffix:** {suffix_status}
 🔢 **Index Count:** {index_count}
+📦 **Upload Type:** {upload_type}
+🔄 **Replace Caption Words:** {replace_caption_status}
+📝 **Replace Filename Words:** {replace_filename_status}
 
 **Click a button below to configure:**"""
 
+    # Choose button text based on current setting
+    upload_btn_text = "📄 Send as Document" if not send_as_document else "📤 Send as Media"
+    
     buttons = [
         [InlineKeyboardButton("📤 Upload Destination", callback_data="set_destination"), InlineKeyboardButton("✏️ Set Caption", callback_data="set_caption")],
-        [InlineKeyboardButton("🖼️ Set Thumbnail", callback_data="set_thumbnail"), InlineKeyboardButton("📝 Set Suffix", callback_data="set_suffix")],
-        [InlineKeyboardButton("🔢 Set Index Count", callback_data="reset_index"), InlineKeyboardButton("🎚️ File Filters", callback_data="set_filters")],
+        [InlineKeyboardButton(upload_btn_text, callback_data="toggle_upload_type"), InlineKeyboardButton("📝 Set Suffix", callback_data="set_suffix")],
+        [InlineKeyboardButton("🔢 Set Index Count", callback_data="reset_index"), InlineKeyboardButton("🖼️ Set Thumbnail", callback_data="set_thumbnail")],
+        [InlineKeyboardButton("🔄 Remove/Replace Words", callback_data="replace_words_menu")],
         [InlineKeyboardButton("🗑️ Clear All Settings", callback_data="clear_settings"), InlineKeyboardButton("🏠 Main Menu", callback_data="start")]
     ]
     
@@ -52,7 +67,7 @@ Configure how your downloaded files are forwarded to your channel.
 
 
 # Callback handler for settings
-@Client.on_callback_query(filters.regex(r"^(set_|reset_|clear_|back_to_settings|reset_index_to_zero|toggle_filter_)"))
+@Client.on_callback_query(filters.regex(r"^(set_|reset_|clear_|back_to_settings|reset_index_to_zero|toggle_upload_type|replace_words_)"))
 async def settings_callback_handler(client: Client, query: CallbackQuery):
     """Handle settings button clicks"""
     data = query.data
@@ -401,6 +416,134 @@ Configure which file types to forward to your channel.
             pass  # Ignore if message didn't change
         return
     
+    elif data == "toggle_upload_type":
+        # Toggle between sending as document or media
+        new_value = await db.toggle_send_as_document(user_id)
+        
+        if new_value:
+            await query.answer("✅ Files will now be sent as documents!", show_alert=True)
+        else:
+            await query.answer("✅ Files will now be sent as media!", show_alert=True)
+        
+        # Refresh settings menu
+        await show_settings_menu(client, query.message, user_id, edit=True)
+    
+    elif data == "replace_words_menu":
+        #Show replace words submenu
+        caption_pattern = await db.get_replace_caption_words(user_id)
+        filename_pattern = await db.get_replace_filename_words(user_id)
+        
+        caption_status = "✅ Set" if caption_pattern else "❌ Not Set"
+        filename_status = "✅ Set" if filename_pattern else "❌ Not Set"
+        
+        text = f"""**🔄 Remove/Replace Words**
+
+Configure word replacements for captions and filenames.
+
+**Current Status:**
+✏️ **Caption:** {caption_status}
+📝 **Filename:** {filename_status}
+
+**How it works:**
+Use pattern: `find1:change1|find2:change2`
+
+• **find**: Word to change
+• **change**: Replacement (leave empty to remove)
+• **|**: Separator for multiple rules
+
+**Example:**
+`apple:banana|the|sun:moon`
+
+This will:
+• Change "apple" → "banana"
+• Remove "the"
+• Change "sun" → "moon"
+
+Works with words separated by space, comma, `-`, or `_`
+
+**Choose what to configure:**"""
+        
+        buttons = [
+            [InlineKeyboardButton("✏️ Caption", callback_data="replace_words_caption"), InlineKeyboardButton("📝 Filename", callback_data="replace_words_filename")],
+            [InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")]
+        ]
+        
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif data == "replace_words_caption":
+        current_pattern = await db.get_replace_caption_words(user_id)
+        
+        text = f"""**✏️ Caption Word Replacement**
+
+Set find:replace rules for captions.
+
+**Current Pattern:**
+{f"`{current_pattern}`" if current_pattern else "❌ Not set"}
+
+**Pattern Format:**
+`find1:change1|find2:change2|...`
+
+**Examples:**
+• `hello:hi` - Replace "hello" with "hi"
+• `test` - Remove word "test"
+• `old:new|bad:good|spam` - Multiple rules
+
+**Send your pattern now:**
+(or click Reset to clear)"""
+        
+        settings_state[user_id] = {'action': 'set_replace_caption'}
+        
+        buttons = [
+            [InlineKeyboardButton("🗑️ Reset Pattern", callback_data="reset_replace_caption")],
+            [InlineKeyboardButton("🔙 Back", callback_data="replace_words_menu")]
+        ]
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif data == "replace_words_filename":
+        current_pattern = await db.get_replace_filename_words(user_id)
+        
+        text = f"""**📝 Filename Word Replacement**
+
+Set find:replace rules for filenames.
+
+**Current Pattern:**
+{f"`{current_pattern}`" if current_pattern else "❌ Not set"}
+
+**Pattern Format:**
+`find1:change1|find2:change2|...`
+
+**Examples:**
+• `sample:example` - Replace "sample" with "example"
+• `test` - Remove word "test"
+• `old:new|bad:good|temp` - Multiple rules
+
+**Note:** Works with separators: space, comma, `-`, `_`
+
+**Send your pattern now:**
+(or click Reset to clear)"""
+        
+        settings_state[user_id] = {'action': 'set_replace_filename'}
+        
+        buttons = [
+            [InlineKeyboardButton("🗑️ Reset Pattern", callback_data="reset_replace_filename")],
+            [InlineKeyboardButton("🔙 Back", callback_data="replace_words_menu")]
+        ]
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif data == "reset_replace_caption":
+        await db.set_replace_caption_words(user_id, None)
+        await query.answer("✅ Caption replacement pattern cleared!", show_alert=True)
+        if user_id in settings_state:
+            del settings_state[user_id]
+        await show_settings_menu(client, query.message, user_id, edit=True)
+    
+    elif data == "reset_replace_filename":
+        await db.set_replace_filename_words(user_id, None)
+        await query.answer("✅ Filename replacement pattern cleared!", show_alert=True)
+        if user_id in settings_state:
+            del settings_state[user_id]
+        await show_settings_menu(client, query.message, user_id, edit=True)
+    
     elif data == "back_to_settings":
         # Clear state and go back to settings menu
         if user_id in settings_state:
@@ -420,12 +563,20 @@ async def show_settings_menu(client: Client, message: Message, user_id: int, edi
     thumbnail = settings.get('custom_thumbnail') if settings else None
     suffix = settings.get('filename_suffix') if settings else None
     index_count = settings.get('index_count', 0) if settings else 0
+    send_as_document = await db.get_send_as_document(user_id)
     
     # Format status
     dest_status = "✅ Set" if destination else "❌ Not Set"
     caption_status = "✅ Set" if caption else "❌ Not Set"
     thumb_status = "✅ Set" if thumbnail else "❌ Not Set"
     suffix_status = "✅ Set" if suffix else "❌ Not Set"
+    upload_type = "📄 Document" if send_as_document else "📤 Media"
+    
+    # Get replace words settings
+    replace_caption = settings.get('replace_caption_words') if settings else None
+    replace_filename = settings.get('replace_filename_words') if settings else None
+    replace_caption_status = f"✅ {replace_caption[:20]}..." if replace_caption and len(replace_caption) > 20 else (f"✅ {replace_caption}" if replace_caption else "❌ Not Set")
+    replace_filename_status = f"✅ {replace_filename[:20]}..." if replace_filename and len(replace_filename) > 20 else (f"✅ {replace_filename}" if replace_filename else "❌ Not Set")
     
     settings_text = f"""**⚙️ Forward Settings**
 
@@ -437,13 +588,20 @@ Configure how your downloaded files are forwarded to your channel.
 🖼️ **Custom Thumbnail:** {thumb_status}
 📝 **Filename Suffix:** {suffix_status}
 🔢 **Index Count:** {index_count}
+📦 **Upload Type:** {upload_type}
+🔄 **Replace Caption Words:** {replace_caption_status}
+📝 **Replace Filename Words:** {replace_filename_status}
 
 **Click a button below to configure:**"""
 
+    # Choose button text based on current setting
+    upload_btn_text = "📄 Send as Document" if not send_as_document else "📤 Send as Media"
+    
     buttons = [
         [InlineKeyboardButton("📤 Upload Destination", callback_data="set_destination"), InlineKeyboardButton("✏️ Set Caption", callback_data="set_caption")],
-        [InlineKeyboardButton("🖼️ Set Thumbnail", callback_data="set_thumbnail"), InlineKeyboardButton("📝 Set Suffix", callback_data="set_suffix")],
-        [InlineKeyboardButton("🔢 Set Index Count", callback_data="reset_index"), InlineKeyboardButton("🎚️ File Filters", callback_data="set_filters")],
+        [InlineKeyboardButton(upload_btn_text, callback_data="toggle_upload_type"), InlineKeyboardButton("📝 Set Suffix", callback_data="set_suffix")],
+        [InlineKeyboardButton("🔢 Set Index Count", callback_data="reset_index"), InlineKeyboardButton("🖼️ Set Thumbnail", callback_data="set_thumbnail")],
+        [InlineKeyboardButton("🔄 Remove/Replace Words", callback_data="replace_words_menu")],
         [InlineKeyboardButton("🗑️ Clear All Settings", callback_data="clear_settings"), InlineKeyboardButton("🏠 Main Menu", callback_data="start")]
     ]
     
@@ -698,8 +856,8 @@ Use /settings to change it anytime.""")
 **Starting Number:** `{index_num}`
 
 **How it works:**
-• Next file will use: {index_num + 1}
-• Then: {index_num + 2}, {index_num + 3}, etc.
+• Next file will use: {index_num}
+• Then: {index_num + 1}, {index_num + 2}, etc.
 
 The counter will increment automatically with each upload!
 
@@ -707,4 +865,66 @@ Use /settings to change it anytime.""")
         
         except ValueError:
             return await message.reply("❌ **Invalid number!**\n\nPlease send a valid integer number.")
+    
+    elif action == 'set_replace_caption':
+        # User is sending caption replacement pattern
+        if not message.text:
+            return await message.reply("❌ **Please send a text pattern.**")
+        
+        pattern = message.text.strip()
+        
+        # Validate pattern
+        if len(pattern) > 500:
+            return await message.reply("❌ **Pattern too long!**\n\nMax 500 characters allowed.")
+        
+        # Save pattern
+        await db.set_replace_caption_words(user_id, pattern)
+        
+        # Clear state
+        del settings_state[user_id]
+        
+        await message.reply(f"""✅ **Caption replacement pattern set!**
+
+**Your Pattern:** `{pattern}`
+
+**Example results:**
+If your pattern is `test:demo|old:new|remove`
+• "test video" → "demo video"
+• "old_file" → "new_file"
+• "remove this" → " this"
+
+This will be applied to all future file captions!
+
+Use /settings to change it anytime.""")
+    
+    elif action == 'set_replace_filename':
+        # User is sending filename replacement pattern
+        if not message.text:
+            return await message.reply("❌ **Please send a text pattern.**")
+        
+        pattern = message.text.strip()
+        
+        # Validate pattern
+        if len(pattern) > 500:
+            return await message.reply("❌ **Pattern too long!**\n\nMax 500 characters allowed.")
+        
+        # Save pattern
+        await db.set_replace_filename_words(user_id, pattern)
+        
+        # Clear state
+        del settings_state[user_id]
+        
+        await message.reply(f"""✅ **Filename replacement pattern set!**
+
+**Your Pattern:** `{pattern}`
+
+**Example results:**
+If your pattern is `sample:example|test|old:new`
+• "sample_video.mp4" → "example_video.mp4"
+• "test_file.pdf" → "_file.pdf"
+• "old-movie.mkv" → "new-movie.mkv"
+
+This will be applied to all future filenames!
+
+Use /settings to change it anytime.""")
 

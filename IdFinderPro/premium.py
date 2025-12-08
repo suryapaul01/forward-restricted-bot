@@ -48,10 +48,10 @@ async def premium_menu(client: Client, message: Message):
 ✅ You have Premium!
 
 {expiry_text}
-**Usage Today:** {downloads_today}/1000
+**Usage Today:** {downloads_today} downloads (Unlimited)
 
 **Benefits:**
-✅ 1000 downloads/day
+✅ Unlimited downloads/day
 ✅ Priority support
 ✅ Faster processing
 
@@ -64,7 +64,7 @@ Use `/redeem` to extend membership."""
 **Usage Today:** {downloads_today}/10
 
 **Premium Benefits:**
-✅ 1000 downloads/day (vs 10)
+✅ Unlimited downloads (no daily limit)
 ✅ Priority support  
 ✅ Faster processing
 
@@ -143,7 +143,7 @@ async def redeem_code(client: Client, message: Message):
 **New Expiry:** {expiry_date}
 
 **Benefits:**
-• 1000 downloads per day
+• Unlimited downloads per day
 • Priority support
 • Faster downloads
 
@@ -220,7 +220,7 @@ async def on_successful_payment(client: Client, message: Message):
 **Expires:** {expiry_date}
 
 **Benefits:**
-• 1000 downloads per day
+• Unlimited downloads per day
 • Priority support  
 • Faster downloads
 

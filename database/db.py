@@ -23,6 +23,11 @@ class Database:
             custom_thumbnail = None,  # File ID of custom thumbnail
             filename_suffix = None,  # Suffix for filename
             index_count = 0,  # Counter for {IndexCount} variable
+            # Send as document toggle
+            send_as_document = False,  # If True, send videos/photos/audio as documents
+            # Replace words settings
+            replace_caption_words = None,  # Pattern: "find1:change1|find2:change2"
+            replace_filename_words = None,  # Pattern: "find1:change1|find2:change2"
             # File type filters (all enabled by default)
             filter_text = True,
             filter_document = True,
@@ -114,7 +119,7 @@ class Database:
         
         # Check limits
         is_premium_user = await self.is_premium(user_id)
-        limit = 1000 if is_premium_user else 10  # Premium: 1000/day, Free: 10/day
+        limit = 999999 if is_premium_user else 10  # Premium: Unlimited, Free: 10/day
         
         if downloads_today >= limit:
             return False  # Limit exceeded
@@ -188,13 +193,18 @@ class Database:
         return user.get('filename_suffix') if user else None
     
     async def increment_index_count(self, user_id):
-        """Increment and return index count"""
-        result = await self.col.find_one_and_update(
+        """Get current index count and increment for next use"""
+        # Get current value first
+        user = await self.col.find_one({'id': int(user_id)})
+        current_count = user.get('index_count', 0) if user else 0
+        
+        # Increment for next time
+        await self.col.update_one(
             {'id': int(user_id)},
-            {'$inc': {'index_count': 1}},
-            return_document=True
+            {'$inc': {'index_count': 1}}
         )
-        return result.get('index_count', 1) if result else 1
+        
+        return current_count
     
     async def reset_index_count(self, user_id):
         """Reset index count to 0"""
@@ -260,5 +270,53 @@ class Database:
         if not user:
             return True  # Default enabled
         return user.get(filter_name, True)
+    
+    # Send as document toggle methods
+    async def toggle_send_as_document(self, user_id):
+        """Toggle send as document setting"""
+        user = await self.col.find_one({'id': int(user_id)})
+        if not user:
+            return False
+        
+        current_value = user.get('send_as_document', False)
+        new_value = not current_value
+        
+        await self.col.update_one(
+            {'id': int(user_id)},
+            {'$set': {'send_as_document': new_value}}
+        )
+        return new_value
+    
+    async def get_send_as_document(self, user_id):
+        """Get send as document status"""
+        user = await self.col.find_one({'id': int(user_id)})
+        if not user:
+            return False  # Default to media
+        return user.get('send_as_document', False)
+    
+    # Replace words methods
+    async def set_replace_caption_words(self, user_id, pattern):
+        """Set caption word replacement pattern"""
+        await self.col.update_one(
+            {'id': int(user_id)},
+            {'$set': {'replace_caption_words': pattern}}
+        )
+    
+    async def get_replace_caption_words(self, user_id):
+        """Get caption word replacement pattern"""
+        user = await self.col.find_one({'id': int(user_id)})
+        return user.get('replace_caption_words') if user else None
+    
+    async def set_replace_filename_words(self, user_id, pattern):
+        """Set filename word replacement pattern"""
+        await self.col.update_one(
+            {'id': int(user_id)},
+            {'$set': {'replace_filename_words': pattern}}
+        )
+    
+    async def get_replace_filename_words(self, user_id):
+        """Get filename word replacement pattern"""
+        user = await self.col.find_one({'id': int(user_id)})
+        return user.get('replace_filename_words') if user else None
 
 db = Database(DB_URI, DB_NAME)
