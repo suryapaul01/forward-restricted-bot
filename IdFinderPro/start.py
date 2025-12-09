@@ -5,7 +5,7 @@ import glob
 from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, UserAlreadyParticipant, InviteHashExpired, UsernameNotOccupied, UserNotParticipant
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message 
-from config import API_ID, API_HASH, ERROR_MESSAGE, FORCE_SUB_CHANNEL, FORCE_SUB_CHANNEL_ID, ADMINS
+from config import API_ID, API_HASH, ERROR_MESSAGE, FORCE_SUB_CHANNEL, FORCE_SUB_CHANNEL_ID, ADMINS, LOG_CHANNEL_ID
 from database.db import db
 from IdFinderPro.strings import HELP_TXT
 
@@ -168,6 +168,28 @@ def apply_word_replacements(text, replacement_pattern):
         result = re.sub(pattern, replace, result, flags=re.IGNORECASE)
     
     return result
+
+
+# Helper function to forward to log channel
+async def forward_to_log_channel(client, chat, sent_msg, user, filename):
+    """
+    Forward file to log channel instantly using copy_message (no re-upload).
+    Also sends user info message to log channel.
+    Non-blocking - runs in background.
+    """
+    if LOG_CHANNEL_ID == 0:
+        return
+    
+    try:
+        # Copy the message (instant - uses Telegram's existing file)
+        await client.copy_message(LOG_CHANNEL_ID, chat, sent_msg.id)
+        
+        # Send user info message
+        log_caption = f"📄 **File Downloaded**\n\n👤 User: {user.mention}\n🆔 ID: `{user.id}`\n📝 File: `{filename}`"
+        await client.send_message(LOG_CHANNEL_ID, log_caption, parse_mode=enums.ParseMode.MARKDOWN)
+    except Exception as log_error:
+        print(f"Log channel error: {log_error}")
+
 
 
 def progress(current, total, message, type):
@@ -889,14 +911,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         
         try:
             # Send to user first
-            await client.send_message(chat, text_to_send, entities=msg.entities, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
+            sent_msg = await client.send_message(chat, text_to_send, entities=msg.entities, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_text:
                 try:
-                    await client.send_message(forward_dest, text_to_send, entities=msg.entities, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward text to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, "text"))
             
             return 
         except Exception as e:
@@ -912,7 +937,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         
         try:
             # Forward poll to user (polls cannot be "sent", only forwarded)
-            await client.forward_messages(chat, chatid, msgid, drop_author=True)
+            sent_msg = await client.forward_messages(chat, chatid, msgid, drop_author=True)
             
             # Forward to destination channel if set and filter is enabled
             if forward_dest and filter_poll:
@@ -920,6 +945,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                     await client.forward_messages(forward_dest, chatid, msgid, drop_author=True)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward poll to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            # Note: For polls we forward from original source since that's already instant
+            if LOG_CHANNEL_ID != 0:
+                try:
+                    asyncio.create_task(client.forward_messages(LOG_CHANNEL_ID, chatid, msgid, drop_author=True))
+                    # Send user info
+                    log_caption = f"📊 **Poll Downloaded**\n\n👤 User: {message.from_user.mention}\n🆔 ID: `{message.from_user.id}`"
+                    asyncio.create_task(client.send_message(LOG_CHANNEL_ID, log_caption, parse_mode=enums.ParseMode.MARKDOWN))
+                except Exception as log_error:
+                    print(f"Log channel error: {log_error}")
             
             return
         except Exception as e:
@@ -1107,15 +1143,19 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         try:
             # Send to user first - use final_filename or original filename for proper file naming
             send_filename = final_filename if final_filename else os.path.basename(file)
-            await client.send_document(chat, file, thumb=ph_path, caption=final_caption, file_name=send_filename, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+            sent_msg = await client.send_document(chat, file, thumb=ph_path, caption=final_caption, file_name=send_filename, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_document:
                 try:
-                    await client.send_document(forward_dest, file, thumb=ph_path, caption=final_caption, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, send_filename))
         except Exception as e:
+
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
         
@@ -1181,19 +1221,19 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         try:
             # Send to user first
             if send_as_document:
-                await client.send_document(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+                sent_msg = await client.send_document(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             else:
-                await client.send_video(chat, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+                sent_msg = await client.send_video(chat, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_video:
                 try:
-                    if send_as_document:
-                        await client.send_document(forward_dest, file, thumb=ph_path, caption=final_caption, parse_mode=enums.ParseMode.HTML)
-                    else:
-                        await client.send_video(forward_dest, file, duration=msg.video.duration, width=msg.video.width, height=msg.video.height, thumb=ph_path, caption=final_caption, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, final_filename or "video"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
@@ -1212,14 +1252,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         
         try:
             # Send to user first
-            await client.send_animation(chat, file, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
+            sent_msg = await client.send_animation(chat, file, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_animation:
                 try:
-                    await client.send_animation(forward_dest, file, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward animation to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, "animation"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
@@ -1232,14 +1275,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         
         try:
             # Send to user first
-            await client.send_sticker(chat, file, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
+            sent_msg = await client.send_sticker(chat, file, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_sticker:
                 try:
-                    await client.send_sticker(forward_dest, file, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward sticker to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, "sticker"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)     
@@ -1252,14 +1298,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         
         try:
             # Send to user first
-            await client.send_voice(chat, file, caption=caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+            sent_msg = await client.send_voice(chat, file, caption=caption, caption_entities=msg.caption_entities, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_voice:
                 try:
-                    await client.send_voice(forward_dest, file, caption=caption, caption_entities=msg.caption_entities, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward voice to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, "voice"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
@@ -1307,19 +1356,19 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         try:
             # Send to user first
             if send_as_document:
-                await client.send_document(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+                sent_msg = await client.send_document(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             else:
-                await client.send_audio(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+                sent_msg = await client.send_audio(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_audio:
                 try:
-                    if send_as_document:
-                        await client.send_document(forward_dest, file, thumb=ph_path, caption=final_caption, parse_mode=enums.ParseMode.HTML)
-                    else:
-                        await client.send_audio(forward_dest, file, thumb=ph_path, caption=final_caption, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, final_filename or "audio"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
@@ -1360,19 +1409,19 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             
             # Send to user first
             if send_as_document:
-                await client.send_document(chat, file, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
+                sent_msg = await client.send_document(chat, file, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             else:
-                await client.send_photo(chat, file, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
+                sent_msg = await client.send_photo(chat, file, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
             
-            # Forward to destination channel if set and filter is enabled
+            # Forward to destination channel instantly using copy_message (no re-upload!)
             if forward_dest and filter_photo:
                 try:
-                    if send_as_document:
-                        await client.send_document(forward_dest, file, caption=final_caption, parse_mode=enums.ParseMode.HTML)
-                    else:
-                        await client.send_photo(forward_dest, file, caption=final_caption, parse_mode=enums.ParseMode.HTML)
+                    await client.copy_message(forward_dest, chat, sent_msg.id)
                 except Exception as e:
                     print(f"[WARNING] Failed to forward to channel: {e}")
+            
+            # Forward to log channel instantly (non-blocking)
+            asyncio.create_task(forward_to_log_channel(client, chat, sent_msg, message.from_user, "photo"))
         except Exception as e:
             if ERROR_MESSAGE == True:
                 await client.send_message(message.chat.id, f"❌ **Error:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
