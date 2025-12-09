@@ -32,7 +32,7 @@ class Bot(Client):
             plugins=dict(root="IdFinderPro"),
             workers=100,  # Increased workers for better concurrency
             sleep_threshold=10,
-            max_concurrent_transmissions=10,  # Allow multiple simultaneous uploads/downloads
+            max_concurrent_transmissions=3,  # Reduced to prevent network overload and timeouts
             no_updates=False,
             takeout=False
         )

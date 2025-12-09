@@ -92,6 +92,12 @@ async def upstatus(client, statusfile, message, chat):
 import time as time_module
 progress_data = {}
 
+# Track status messages for cleanup during cancel
+status_messages = {}  # {user_id: [message_objects]}
+
+# Track active downloads for admin monitoring
+active_downloads = {}  # {user_id: {'file': filename, 'started': timestamp}}
+
 # Helper function to apply custom caption
 def apply_custom_caption(template, original_caption, filename, index_count):
     """Apply custom caption template with variables"""
@@ -363,15 +369,27 @@ async def send_cancel(client: Client, message: Message):
         # Give cancel signal time to propagate (up to 5 seconds as per user request)
         await asyncio.sleep(2)
         
-        # Clean up any status files
+        # Clean up any status files and delete status messages
         try:
             import glob
-            # Clean all status files for this user
+            
+            # Delete all tracked status messages for this user
+            if user_id in status_messages:
+                for msg in status_messages[user_id]:
+                    try:
+                        await msg.delete()
+                    except Exception as e:
+                        print(f"[CLEANUP] Could not delete status message: {e}")
+                # Clear the tracking list
+                status_messages[user_id] = []
+            
+            # Clean all status files
             for file in glob.glob(f"*status.txt"):
                 try:
                     os.remove(file)
                 except:
                     pass
+            
             # Clean up any partial downloads for this user
             for partial_file in glob.glob(f"downloads/{user_id}_*"):
                 try:
@@ -910,23 +928,52 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             return
 
     smsg = await client.send_message(message.chat.id, '📥 **Downloading...**', reply_to_message_id=message.id)
+    
+    # Track this status message for cancel command
+    if message.from_user.id not in status_messages:
+        status_messages[message.from_user.id] = []
+    status_messages[message.from_user.id].append(smsg)
+    
     asyncio.create_task(downstatus(client, f'{message.id}downstatus.txt', smsg, chat))
     try:
-        # Download with timeout to prevent stuck processes (10 minutes max)
-        # Use unique filename per user to prevent conflicts
+        # Download with user-specific filename to prevent conflicts
+        # Use format: userid_random5digit (Pyrogram will add .temp automatically)
+        import random
+        import time
+        random_suffix = random.randint(10000, 99999)
+        temp_filename = f"downloads/{message.from_user.id}_{random_suffix}"
+        
+        # Track active download
+        active_downloads[message.from_user.id] = {
+            'file': temp_filename,
+            'started': time.time()
+        }
+        
         try:
-            file = await asyncio.wait_for(
-                acc.download_media(msg, file_name=f"downloads/{message.from_user.id}_", progress=progress, progress_args=[message,"down"]),
-                timeout=600  # 10 minute timeout
+            file = await acc.download_media(msg, file_name=temp_filename, progress=progress, progress_args=[message,"down"])
+        except TimeoutError:
+            # Handle Pyrogram timeout specifically
+            await smsg.edit_text(
+                "⏱️ **Download Timeout**\n\n"
+                "The download is taking longer than expected. This usually happens with:\n"
+                "• Very large files\n"
+                "• Slow network connection\n"
+                "• Telegram server delays\n\n"
+                "**What to do:**\n"
+                "✅ Try again in a few minutes\n"
+                "✅ Check your internet connection\n"
+                "✅ Large files may need multiple attempts\n\n"
+                "💡 The download will continue in the background if you try again."
             )
-        except asyncio.TimeoutError:
-            # Clean up and report timeout
+            # Clean up
             if os.path.exists(f'{message.id}downstatus.txt'):
                 try:
                     os.remove(f'{message.id}downstatus.txt')
                 except:
                     pass
-            # Clean up any partial download files for this user
+            if message.from_user.id in active_downloads:
+                del active_downloads[message.from_user.id]
+            # Clean temp files
             try:
                 import glob
                 for partial_file in glob.glob(f"downloads/{message.from_user.id}_*"):
@@ -936,7 +983,6 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                         pass
             except:
                 pass
-            await smsg.edit_text("❌ **Download Timeout!**\n\n⏱️ Download took too long (>10 minutes)\n\n💡 This usually means:\n• File is very large\n• Network is slow\n• Server is overloaded\n\nTry again or contact support.")
             return
         
         # Clean up download status file
@@ -945,6 +991,10 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                 os.remove(f'{message.id}downstatus.txt')
             except:
                 pass
+        
+        # Remove from active downloads
+        if message.from_user.id in active_downloads:
+            del active_downloads[message.from_user.id]
     except Exception as e:
         # Clean up on download failure
         if os.path.exists(f'{message.id}downstatus.txt'):
@@ -952,7 +1002,7 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                 os.remove(f'{message.id}downstatus.txt')
             except:
                 pass
-        # Clean up any partial download files for this user
+        # Clean up any partial download files for this user (including .temp files)
         try:
             import glob
             for partial_file in glob.glob(f"downloads/{message.from_user.id}_*"):
@@ -962,6 +1012,9 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
                     pass
         except:
             pass
+        # Remove from active downloads
+        if message.from_user.id in active_downloads:
+            del active_downloads[message.from_user.id]
         if ERROR_MESSAGE == True:
             await client.send_message(message.chat.id, f"Error: {e}", reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML) 
         return await smsg.delete()
@@ -1008,23 +1061,27 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
         replace_filename_words = await db.get_replace_filename_words(message.from_user.id)
         
         # Get original filename
-        original_filename = msg.document.file_name if msg.document else None
+        original_filename = msg.document.file_name if msg.document and msg.document.file_name else None
         
-        # Apply word replacements to filename if pattern is set, then suffix
+        # Start with original filename
         final_filename = original_filename
-        if replace_filename_words and original_filename:
-            final_filename = apply_word_replacements(original_filename, replace_filename_words)
+        
+        # Apply word replacements to filename if pattern is set
+        if replace_filename_words and final_filename:
+            final_filename = apply_word_replacements(final_filename, replace_filename_words)
+        
         # Apply suffix to filename if set
-        if suffix and original_filename:
-            final_filename = add_suffix_to_filename(original_filename, suffix)
-            # Rename file
-            if os.path.exists(file):
-                new_file_path = os.path.join(os.path.dirname(file), final_filename)
-                try:
-                    os.rename(file, new_file_path)
-                    file = new_file_path
-                except:
-                    pass
+        if suffix and final_filename:
+            final_filename = add_suffix_to_filename(final_filename, suffix)
+        
+        # Rename file to final filename if different
+        if final_filename and os.path.exists(file):
+            new_file_path = os.path.join(os.path.dirname(file), final_filename)
+            try:
+                os.rename(file, new_file_path)
+                file = new_file_path
+            except:
+                pass
         
         # Get thumbnail
         try:
@@ -1048,8 +1105,9 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             final_caption = apply_word_replacements(final_caption, replace_caption_words)
         
         try:
-            # Send to user first
-            await client.send_document(chat, file, thumb=ph_path, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
+            # Send to user first - use final_filename or original filename for proper file naming
+            send_filename = final_filename if final_filename else os.path.basename(file)
+            await client.send_document(chat, file, thumb=ph_path, caption=final_caption, file_name=send_filename, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML, progress=progress, progress_args=[message,"up"])
             
             # Forward to destination channel if set and filter is enabled
             if forward_dest and filter_document:
@@ -1289,6 +1347,17 @@ async def handle_private(client: Client, acc, message: Message, chatid: int, msg
             final_caption = caption
         
         try:
+            # Ensure the downloaded file has a proper image extension
+            if file and os.path.exists(file):
+                # If file doesn't have an image extension, add .jpg
+                if not file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                    new_file = file + '.jpg'
+                    try:
+                        os.rename(file, new_file)
+                        file = new_file
+                    except:
+                        pass
+            
             # Send to user first
             if send_as_document:
                 await client.send_document(chat, file, caption=final_caption, reply_to_message_id=message.id, parse_mode=enums.ParseMode.HTML)
