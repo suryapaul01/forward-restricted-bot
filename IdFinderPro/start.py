@@ -179,9 +179,10 @@ def apply_word_replacements(text, replacement_pattern):
         find_escaped = re.escape(find)
         
         # Create pattern that matches the word with various separators
-        # Matches: word at start/end, or surrounded by space, comma, hyphen, underscore
-        # FIX: Use single backslash in raw string (not double)
-        pattern = r'(?:^|(?<=[\s,\-_]))' + find_escaped + r'(?=[\s,\-_]|$)'
+        # Comprehensive separator list including: spaces, punctuation, symbols, math operators, 
+        # currency symbols, arrows, geometric shapes, and special characters
+        separators = r'[\s,.;:!?\'"`~@#$%^&*()\[\]{}|/\\+=•·‣°÷×±¶§©®™†‡…¤¦¨¯¸ºª–—―‚„""''‹›«»≠≈≡≤≥∞∈∉∋∑∏√∂∆∇∫∴∵⊕⊗⊂⊃⊆⊇€£¥₩₽₹→←↑↓⇒⇐⇑⇓⇔★☆◆◇■□▲△▼▽\-_]'
+        pattern = r'(?:^|(?<=' + separators + r'))' + find_escaped + r'(?=' + separators + r'|$)'
         
         # Replace all occurrences
         result = re.sub(pattern, replace, result, flags=re.IGNORECASE)
