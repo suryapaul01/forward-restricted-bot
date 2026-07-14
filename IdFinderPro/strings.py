@@ -11,10 +11,10 @@ HELP_TXT = """**📖 HELP - Restricted Content Download Bot**
 **📥 Downloading Files**
 
 **Single File:**
-`https://t.me/channel/123`
+`https://t.me/channel/123` or `https://telegram.me/channel/123`
 
 **Multiple Files (Batch):**
-`https://t.me/channel/100-110`
+`https://t.me/channel/100-110` or `https://telegram.me/channel/100-110`
 
 **Private Channels:**
 Send invite link → Then post link
@@ -44,27 +44,27 @@ DOWNLOAD_HELP = """**📥 How to Download - Complete Guide**
 
 **🔗 For Public Channels:**
 Simply send the post link:
-`https://t.me/channelname/123`
+`https://t.me/channelname/123` or `https://telegram.me/channelname/123`
 
 **🔒 For Private Channels:**
 1. Send the invite link first:
-   `https://t.me/+InviteHash`
+   `https://t.me/+InviteHash` or `https://telegram.me/+InviteHash`
 2. Then send the post link:
-   `https://t.me/c/123456789/100`
+   `https://t.me/c/123456789/100` or `https://telegram.me/c/123456789/100`
 
 **🤖 For Bot Channels:**
-`https://t.me/b/botusername/4321`
+`https://t.me/b/botusername/4321` or `https://telegram.me/b/botusername/4321`
 
 **📦 Batch Download (Multiple Files):**
 Send a range in the link:
-`https://t.me/channel/1-50`
+`https://t.me/channel/1-50` or `https://telegram.me/channel/1-50`
 
 This downloads messages 1 to 50 at once!
 
 **📌 Examples:**
-• Download 10 files: `https://t.me/mychannel/1-10`
-• Download 50 files: `https://t.me/c/1234567890/500-550`
-• Download from private: `https://t.me/c/1234567890/1-100`
+• Download 10 files: `https://t.me/mychannel/1-10` or `https://telegram.me/mychannel/1-10`
+• Download 50 files: `https://t.me/c/1234567890/500-550` or `https://telegram.me/c/1234567890/500-550`
+• Download from private: `https://t.me/c/1234567890/1-100` or `https://telegram.me/c/1234567890/1-100`
 
 **⚠️ Important Notes:**
 • Files download one by one

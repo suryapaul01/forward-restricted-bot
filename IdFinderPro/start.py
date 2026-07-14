@@ -355,24 +355,24 @@ Download multiple files at once by specifying a range!
 
 **1️⃣ Single File:**
 Send the link normally:
-`https://t.me/channel/123`
+`https://t.me/channel/123` or `https://telegram.me/channel/123`
 
 **2️⃣ Multiple Files (Batch):**
 Add a range to the link:
-`https://t.me/channel/100-150`
+`https://t.me/channel/100-150` or `https://telegram.me/channel/100-150`
 
 This will download messages from 100 to 150!
 
 **✨ Examples:**
 
 📌 Download 10 files:
-`https://t.me/mychannel/1-10`
+`https://t.me/mychannel/1-10` or `https://telegram.me/mychannel/1-10`
 
 📌 Download 50 files:
-`https://t.me/c/1234567890/500-550`
+`https://t.me/c/1234567890/500-550` or `https://telegram.me/c/1234567890/500-550`
 
 📌 Download from private channel:
-`https://t.me/c/1234567890/1-100`
+`https://t.me/c/1234567890/1-100` or `https://telegram.me/c/1234567890/1-100`
 
 **⚠️ Important Notes:**
 
@@ -1253,8 +1253,13 @@ async def save(client: Client, message: Message):
         )
         return
     
+    # Normalize link if it uses telegram.me instead of t.me
+    msg_text = message.text
+    if "telegram.me" in msg_text:
+        msg_text = msg_text.replace("telegram.me", "t.me")
+        
     # Handle invite links
-    if "/+" in message.text or "/joinchat/" in message.text:
+    if "/+" in msg_text or "/joinchat/" in msg_text:
         user_data = await db.get_session(message.from_user.id)
         if user_data is None:
             return await message.reply("**🔐 Please /login first to join channels.**")
@@ -1272,7 +1277,7 @@ async def save(client: Client, message: Message):
             await acc.connect()
             
             # Extract invite hash
-            invite_link = message.text.strip()
+            invite_link = msg_text.strip()
             
             try:
                 chat = await acc.join_chat(invite_link)
@@ -1289,7 +1294,7 @@ async def save(client: Client, message: Message):
             await message.reply(f"❌ **Error:** `{e}`\n\nPlease try `/logout` then `/login` again.")
         return
     
-    if "https://t.me/" in message.text:
+    if "https://t.me/" in msg_text:
         # FORCE SUBSCRIPTION CHECK
         is_subscribed = await check_force_sub(client, message.from_user.id)
         if not is_subscribed:
@@ -1308,7 +1313,7 @@ async def save(client: Client, message: Message):
         if batch_temp.IS_BATCH.get(message.from_user.id) == False:
             return await message.reply_text("⚠️ **One download is already in progress!**\n\n⏳ Please wait for it to complete or use `/cancel` to stop it.")
         
-        datas = message.text.split("/")
+        datas = msg_text.split("/")
         temp = datas[-1].replace("?single","").split("-")
         fromID = int(temp[0].strip())
         try:
@@ -1375,7 +1380,7 @@ async def save(client: Client, message: Message):
                 break
             
             # private
-            if "https://t.me/c/" in message.text:
+            if "https://t.me/c/" in msg_text:
                 # Login required for private channels
                 user_data = await db.get_session(message.from_user.id)
                 if user_data is None:
@@ -1399,7 +1404,7 @@ async def save(client: Client, message: Message):
                         await client.send_message(message.chat.id, f"❌ **Error on file {msgid}:** `{e}`\n\n💡 If the error persists, try `/logout` and `/login` again.", reply_to_message_id=message.id)
     
             # bot
-            elif "https://t.me/b/" in message.text:
+            elif "https://t.me/b/" in msg_text:
                 # Login required for bot content
                 user_data = await db.get_session(message.from_user.id)
                 if user_data is None:
